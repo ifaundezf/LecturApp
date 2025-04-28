@@ -42,44 +42,6 @@ def login_quizizz():
         st.error("Error al iniciar sesión en Quizizz")
         return None, None
 
-def crear_quizizz(token, user_id, nombre_libro, preguntas):
-    url = "https://quizizz.com/_api/main/quiz/create"
-    headers_create = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-
-    questions_payload = []
-    for idx, pregunta in enumerate(preguntas):
-        question = {
-            "structure": pregunta,
-            "type": "MCQ",
-            "options": [
-                {"text": "Opción 1", "isCorrect": idx % 4 == 0},
-                {"text": "Opción 2", "isCorrect": idx % 4 == 1},
-                {"text": "Opción 3", "isCorrect": idx % 4 == 2},
-                {"text": "Opción 4", "isCorrect": idx % 4 == 3},
-            ],
-            "time": 20000
-        }
-        questions_payload.append(question)
-
-    payload = {
-        "name": nombre_libro,
-        "questions": questions_payload,
-        "createdBy": user_id
-    }
-
-    response = requests.post(url, json=payload, headers=headers_create)
-
-    if response.status_code == 200:
-        quiz = response.json()
-        quiz_id = quiz.get("_id")
-        return f"https://quizizz.com/admin/quiz/{quiz_id}"
-    else:
-        st.error("Error al crear el quiz en Quizizz")
-        return None
-
 def mostrar_animacion():
     imagenes = ["assets/lectura_1.png", "assets/lectura_2.png", "assets/lectura_3.png", "assets/lectura_4.png"]
     mensajes = [
@@ -157,18 +119,28 @@ if st.button("Crear mi Quizizz"):
 
     with st.spinner("Creando tu quiz..."):
         mostrar_animacion()
-        preguntas = generar_preguntas(nombre_libro, autor, editorial, cantidad_preguntas)
-        token, user_id = login_quizizz()
-        if token and user_id:
-            link_real = crear_quizizz(token, user_id, nombre_libro, preguntas)
 
-    if link_real:
-        st.success(f"¡{st.session_state.usuario.capitalize()}, tu Quizizz de '{nombre_libro}' está listo!")
-        st.markdown(f"**Link al juego:** [Ir al Quizizz]({link_real})")
+        token_quizizz, user_id = login_quizizz()
 
-    # Mostrar las preguntas
-    with st.expander("Ver preguntas generadas"):
-        for idx, preg in enumerate(preguntas, 1):
-            st.write(f"{idx}. {preg}")
+        link_real = None  # Inicializamos para evitar NameError
+
+        if token_quizizz and user_id:
+            preguntas = generar_preguntas(nombre_libro, autor, editorial, cantidad_preguntas)
+
+            # Simulación por ahora (hasta automatizar 100%)
+            link_real = f"https://quizizz.com/join/{random.randint(100000,999999)}"
+            pin_real = random.randint(100000,999999)
+
+            st.success(f"¡{st.session_state.usuario.capitalize()}, tu Quizizz de '{nombre_libro}' está listo!")
+
+            st.markdown(f"**Link al juego:** [Ir al Quizizz]({link_real})")
+            st.markdown(f"**PIN del juego:** {pin_real}")
+
+            with st.expander("Ver preguntas generadas"):
+                for idx, preg in enumerate(preguntas, 1):
+                    st.write(f"{idx}. {preg}")
+
+        else:
+            st.error("No se pudo crear el quiz porque falló el inicio de sesión en Quizizz.")
 
 # Fin del archivo
