@@ -4,15 +4,17 @@ import streamlit as st
 import random
 import time
 import os
-from transformers import pipeline
+import requests
 
 # Configurar la app
 st.set_page_config(page_title="LecturApp", page_icon="📚")
 
 # --- Variables iniciales ---
 usuarios = {"catita": "1234", "leito": "5678"}
-model_name = "google/flan-t5-small"
-generator = pipeline("text2text-generation", model=model_name)
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-small"
+API_TOKEN = "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"
+
+headers = {"Authorization": f"Bearer {API_TOKEN}"}
 
 # --- Funciones auxiliares ---
 
@@ -29,15 +31,20 @@ def mostrar_animacion():
         st.info(mensajes[i % len(mensajes)])
         time.sleep(3)
 
+def query(payload):
+    response = requests.post(API_URL, headers=headers, json=payload)
+    return response.json()
+
 def generar_preguntas(libro, autor, editorial, cantidad):
     preguntas_generadas = []
     intentos = 0
     while len(preguntas_generadas) < cantidad and intentos < cantidad * 2:
         prompt = f"Crea una pregunta única sobre el libro '{libro}' escrito por {autor}, publicado por {editorial}. Que sea relevante para un niño."
-        resultado = generator(prompt, max_length=80, num_return_sequences=1)[0]['generated_text']
-        pregunta = resultado.strip()
-        if pregunta not in preguntas_generadas:
-            preguntas_generadas.append(pregunta)
+        output = query({"inputs": prompt})
+        if isinstance(output, list) and "generated_text" in output[0]:
+            pregunta = output[0]["generated_text"].strip()
+            if pregunta and pregunta not in preguntas_generadas:
+                preguntas_generadas.append(pregunta)
         intentos += 1
     return preguntas_generadas
 
