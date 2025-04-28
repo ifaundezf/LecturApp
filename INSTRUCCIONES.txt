@@ -1,0 +1,13 @@
+
+INSTRUCCIONES PARA ACTUALIZAR LECTURAPP:
+
+1. Sube todo el contenido del ZIP a tu repositorio GitHub (puedes actualizar tu proyecto existente).
+2. Asegúrate que el archivo principal sea 'lecturas_app.py'.
+3. Asegúrate que el requirements.txt contenga:
+   streamlit
+   transformers
+   huggingface_hub
+4. En Streamlit Cloud:
+   - Elimina tu app anterior (si quieres) y crea una nueva desde el repositorio actualizado.
+   - O simplemente actualiza el repositorio y reinicia tu app en Streamlit Cloud.
+5. ¡Listo! Ahora puedes usar LecturApp v2 con generación de preguntas inteligentes y animaciones durante la espera.
