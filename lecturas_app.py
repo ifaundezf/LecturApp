@@ -33,13 +33,28 @@ def cargar_sabias_que():
 def cargar_quizzes():
     try:
         with open(QUIZ_DB, encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     except:
         return {}
 
 def guardar_quizzes(data):
     with open(QUIZ_DB, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+# --- Generar preguntas dummy (placeholder) ---
+def generar_preguntas_dummy(libro, cantidad):
+    preguntas = []
+    for i in range(int(cantidad)):
+        pregunta = {
+            "pregunta": f"¿Qué ocurrió en la página {i+1} del libro '{libro}'?",
+            "opciones": [
+                f"Opción A{i+1}", f"Opción B{i+1}", f"Opción C{i+1}", f"Opción D{i+1}"
+            ],
+            "respuesta_correcta": random.randint(0, 3)
+        }
+        preguntas.append(pregunta)
+    return preguntas
 
 # --- Validación de nombres ---
 def nombre_valido(nombre):
@@ -124,6 +139,7 @@ if st.session_state.sala_codigo and st.session_state.jugador:
                 st.session_state.quiz_generado = True
                 st.success("Quiz cargado desde la base de datos.")
             if st.button("🆕 Crear nuevo quiz (sobrescribir)"):
+                preguntas = generar_preguntas_dummy(libro, cantidad)
                 quizzes[clave_libro] = {
                     "libro": libro,
                     "autor": autor,
@@ -131,13 +147,14 @@ if st.session_state.sala_codigo and st.session_state.jugador:
                     "curso": st.session_state.curso,
                     "cantidad": cantidad,
                     "tiempo": tiempo,
-                    "preguntas": []  # Aquí se generarán después
+                    "preguntas": preguntas
                 }
                 guardar_quizzes(quizzes)
                 st.session_state.quiz_generado = True
-                st.success("Nuevo quiz preparado. ¡Listo para generar preguntas!")
+                st.success("Nuevo quiz preparado. ¡Preguntas listas para jugar!")
         elif libro and autor and editorial:
             if st.button("🪄 Generar quiz nuevo"):
+                preguntas = generar_preguntas_dummy(libro, cantidad)
                 quizzes[clave_libro] = {
                     "libro": libro,
                     "autor": autor,
@@ -145,11 +162,11 @@ if st.session_state.sala_codigo and st.session_state.jugador:
                     "curso": st.session_state.curso,
                     "cantidad": cantidad,
                     "tiempo": tiempo,
-                    "preguntas": []
+                    "preguntas": preguntas
                 }
                 guardar_quizzes(quizzes)
                 st.session_state.quiz_generado = True
-                st.success("Quiz creado. ¡Listo para continuar!")
+                st.success("Quiz creado. ¡Preguntas listas para jugar!")
 
     sabias = cargar_sabias_que()
     if st.session_state.curso in sabias:
