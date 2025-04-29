@@ -30,6 +30,17 @@ def cargar_sabias_que():
     except:
         return {}
 
+def cargar_quizzes():
+    try:
+        with open(QUIZ_DB, encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def guardar_quizzes(data):
+    with open(QUIZ_DB, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
 # --- Validación de nombres ---
 def nombre_valido(nombre):
     palabras_prohibidas = ["malo", "tonto", "fuck", "shit", "puta", "mierda"]
@@ -46,6 +57,7 @@ if "sala_codigo" not in st.session_state:
     st.session_state.sala_codigo = ""
     st.session_state.jugador = ""
     st.session_state.curso = ""
+    st.session_state.quiz_generado = False
 
 # Crear sala
 if opcion == "🎮 Crear sala de juego":
@@ -61,6 +73,7 @@ if opcion == "🎮 Crear sala de juego":
             st.session_state.sala_codigo = codigo
             st.session_state.jugador = nombre
             st.session_state.curso = curso
+            st.session_state.quiz_generado = False
             st.success(f"¡Sala creada! Código de sala: {codigo}")
             st.balloons()
 
@@ -78,6 +91,7 @@ if opcion == "👥 Unirse a una sala existente":
         else:
             st.session_state.sala_codigo = codigo
             st.session_state.jugador = nombre
+            st.session_state.quiz_generado = False
             st.success(f"¡Te has unido a la sala {codigo}!")
             st.balloons()
 
@@ -87,9 +101,55 @@ if st.session_state.sala_codigo and st.session_state.jugador:
     st.markdown(f"### ✅ Sala: {st.session_state.sala_codigo}")
     if st.session_state.curso:
         st.markdown(f"### ✅ Curso: {st.session_state.curso}")
-    st.info("(Esta es una vista de prueba. Próximo paso: generar quiz o esperar inicio del juego)")
 
-    st.write("Aquí iría el flujo de espera, datos curiosos, y el botón para jugar solo o esperar.")
+    quizzes = cargar_quizzes()
+    clave_libro = None
+
+    if opcion == "🎮 Crear sala de juego" and not st.session_state.quiz_generado:
+        st.markdown("---")
+        st.subheader("📚 Configura tu quiz de lectura")
+
+        libro = st.text_input("Nombre del libro")
+        autor = st.text_input("Autor")
+        editorial = st.text_input("Editorial")
+        cantidad = st.selectbox("¿Cuántas preguntas quieres generar?", [30, 40, 50])
+        tiempo = st.selectbox("Tiempo para responder cada pregunta:", [5, 10, 20, 30, 60, 90, 120, 240])
+
+        if libro:
+            clave_libro = f"{st.session_state.curso} | {libro.strip().lower()}"
+
+        if clave_libro in quizzes:
+            st.info("Ya existe un quiz para este libro.")
+            if st.button("📂 Usar quiz existente"):
+                st.session_state.quiz_generado = True
+                st.success("Quiz cargado desde la base de datos.")
+            if st.button("🆕 Crear nuevo quiz (sobrescribir)"):
+                quizzes[clave_libro] = {
+                    "libro": libro,
+                    "autor": autor,
+                    "editorial": editorial,
+                    "curso": st.session_state.curso,
+                    "cantidad": cantidad,
+                    "tiempo": tiempo,
+                    "preguntas": []  # Aquí se generarán después
+                }
+                guardar_quizzes(quizzes)
+                st.session_state.quiz_generado = True
+                st.success("Nuevo quiz preparado. ¡Listo para generar preguntas!")
+        elif libro and autor and editorial:
+            if st.button("🪄 Generar quiz nuevo"):
+                quizzes[clave_libro] = {
+                    "libro": libro,
+                    "autor": autor,
+                    "editorial": editorial,
+                    "curso": st.session_state.curso,
+                    "cantidad": cantidad,
+                    "tiempo": tiempo,
+                    "preguntas": []
+                }
+                guardar_quizzes(quizzes)
+                st.session_state.quiz_generado = True
+                st.success("Quiz creado. ¡Listo para continuar!")
 
     sabias = cargar_sabias_que()
     if st.session_state.curso in sabias:
