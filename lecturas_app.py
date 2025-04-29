@@ -23,10 +23,14 @@ headers = {"Authorization": f"Bearer {API_TOKEN}"}
 # --- Funciones auxiliares ---
 
 def login_quizizz():
-    url = "https://quizizz.com/_api/v1/login"
+    url = "https://auth.quizizz.com/oauth/token"
     payload = {
-        "email": QUIZIZZ_EMAIL,
-        "password": QUIZIZZ_PASSWORD
+        "grant_type": "password",
+        "client_id": "default",
+        "username": QUIZIZZ_EMAIL,
+        "password": QUIZIZZ_PASSWORD,
+        "scope": "openid profile email",
+        "audience": "https://quizizz.com/"
     }
     headers_login = {
         "Content-Type": "application/json"
@@ -35,12 +39,11 @@ def login_quizizz():
 
     if response.status_code == 200:
         session_data = response.json()
-        token = session_data.get("token")
-        user_id = session_data.get("user", {}).get("_id")
-        return token, user_id
+        access_token = session_data.get("access_token")
+        return access_token
     else:
-        st.error("Error al iniciar sesión en Quizizz")
-        return None, None
+        st.error(f"Error al iniciar sesión en Quizizz: {response.status_code}")
+        return None
 
 def mostrar_animacion():
     imagenes = ["assets/lectura_1.png", "assets/lectura_2.png", "assets/lectura_3.png", "assets/lectura_4.png"]
@@ -120,11 +123,11 @@ if st.button("Crear mi Quizizz"):
     with st.spinner("Creando tu quiz..."):
         mostrar_animacion()
 
-        token_quizizz, user_id = login_quizizz()
+        access_token = login_quizizz()
 
         link_real = None  # Inicializamos para evitar NameError
 
-        if token_quizizz and user_id:
+        if access_token:
             preguntas = generar_preguntas(nombre_libro, autor, editorial, cantidad_preguntas)
 
             # Simulación por ahora (hasta automatizar 100%)
