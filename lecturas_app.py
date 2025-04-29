@@ -175,3 +175,9 @@ if st.session_state.sala_codigo and st.session_state.jugador:
         st.success(random.choice(sabias[st.session_state.curso]))
 
     st.button("🔁 Mostrar otro dato curioso")
+
+    # Mostrar inicio de juego si ya se generó el quiz
+    if st.session_state.quiz_generado:
+        st.markdown("## 🎮 ¡Todo listo para jugar!")
+        if st.button("Iniciar juego ahora"):
+            st.success("Aquí comenzaría el modo de juego activo... (próximo paso)")
