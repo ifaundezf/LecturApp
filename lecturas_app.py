@@ -181,11 +181,36 @@ if st.session_state.sala_codigo and st.session_state.jugador:
                 st.success("Quiz cargado desde la base de datos.")
         elif libro and autor and editorial:
             with st.spinner("🔍 Buscando PDF en internet..."):
-                link = buscar_pdf_google(libro, autor, editorial)
-                if link:
-                    pdf_data = descargar_pdf(link)
-                else:
-                    st.warning("No se encontró PDF online. Sube el archivo manualmente.")
+    link = buscar_pdf_google(libro, autor, editorial)
+    pdf_data = descargar_pdf(link) if link else None
+
+if not pdf_data:
+    st.warning("No se encontró PDF online. Puedes subir el archivo manualmente.")
+    uploaded = st.file_uploader("Sube el PDF del libro", type=["pdf"])
+    if uploaded:
+        pdf_data = uploaded.read()
+
+if pdf_data:
+    texto = extraer_texto_pdf(pdf_data)
+    preguntas = generar_preguntas_ai(texto, cantidad)
+    if preguntas:
+        cifrar_y_guardar_pdf(libro, pdf_data)
+        quizzes[clave_libro] = {
+            "libro": libro,
+            "autor": autor,
+            "editorial": editorial,
+            "curso": st.session_state.curso,
+            "cantidad": cantidad,
+            "preguntas": preguntas
+        }
+        guardar_json(QUIZ_DB, quizzes)
+        st.session_state.quiz_generado = True
+        st.session_state.quiz_preguntas = preguntas
+        st.success("✅ Quiz creado exitosamente.")
+    else:
+        st.error("No se pudieron generar preguntas del texto.")
+elif not uploaded:
+    st.error("No hay PDF disponible para generar preguntas.")
                     uploaded = st.file_uploader("Sube el PDF del libro", type=["pdf"])
                     pdf_data = uploaded.read() if uploaded else None
 
