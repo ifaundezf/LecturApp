@@ -1,4 +1,4 @@
-# lecturas_app.py - LecturApp: Modo Juego COMPLETO (con búsqueda de PDF, cifrado y generación AI)
+# lecturas_app.py - LecturApp: Modo Juego COMPLETO (actualizado para OpenAI 1.x+)
 
 import streamlit as st
 import json
@@ -9,7 +9,7 @@ import requests
 import fitz  # PyMuPDF
 from serpapi import GoogleSearch
 from cryptography.fernet import Fernet
-import openai
+from openai import OpenAI
 
 # Configuración de página
 st.set_page_config(page_title="LecturApp: Modo Juego", page_icon="📚")
@@ -26,7 +26,7 @@ FERNET_KEY = st.secrets["FERNET_KEY"]
 SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 cipher = Fernet(FERNET_KEY.encode())
-openai.api_key = OPENAI_KEY
+client = OpenAI(api_key=OPENAI_KEY)
 
 # Crear archivos base si no existen
 if not os.path.exists(QUIZ_DB):
@@ -91,16 +91,18 @@ def generar_preguntas_ai(texto, cantidad):
         f"Genera {cantidad} preguntas de opción múltiple basadas en este texto. "
         "Mitad literales y mitad interpretativas. En español latino. Formato JSON con 'pregunta', 'opciones', 'respuesta_correcta'.\nTexto:\n" + texto[:3000]
     )
-    respuesta = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=1000
-    )
     try:
-        preguntas = json.loads(respuesta["choices"][0]["message"]["content"])
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        contenido = response.choices[0].message.content
+        preguntas = json.loads(contenido)
         return preguntas
-    except:
+    except Exception as e:
+        print(f"[Error al generar preguntas] {e}")
         return []
 
 def nombre_valido(nombre):
