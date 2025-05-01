@@ -1,4 +1,4 @@
-# lecturas_app.py - LecturApp: Modo Juego COMPLETO con búsqueda mejorada, OCR y flujo de juego funcional
+# lecturas_app.py - LecturApp con flujo robusto: PDF subida + validación + generación
 
 import streamlit as st
 import json
@@ -131,6 +131,7 @@ if "quiz" not in st.session_state:
     st.session_state.jugador = ""
     st.session_state.pregunta_idx = 0
     st.session_state.puntaje = 0
+    st.session_state.pdf_data = None
 
 nombre = st.text_input("Tu nombre para jugar:")
 libro = st.text_input("Nombre del libro:")
@@ -139,46 +140,55 @@ editorial = st.text_input("Editorial:")
 curso = st.selectbox("Selecciona tu curso:", cursos_lista)
 cantidad = st.selectbox("¿Cuántas preguntas quieres?", [30, 40, 50])
 
-if st.button("🎲 Comenzar juego"):
-    if not nombre_valido(nombre):
-        st.warning("El nombre contiene palabras no permitidas.")
-    else:
+clave = f"{libro.strip().lower()}"
+quizzes = cargar_json(QUIZ_DB)
+
+if clave in quizzes:
+    st.info("Este libro ya tiene preguntas generadas. Puedes comenzar el juego directamente.")
+    if st.button("🎮 Jugar con preguntas existentes"):
+        st.session_state.quiz = quizzes[clave]
         st.session_state.jugador = nombre
-        clave = f"{libro.strip().lower()}"
-        quizzes = cargar_json(QUIZ_DB)
 
-        if clave in quizzes:
-            st.session_state.quiz = quizzes[clave]
-        else:
-            pdf_data = cargar_pdf_cifrado(libro)
-            if not pdf_data:
-                link = buscar_pdf_google(libro, autor, editorial)
-                pdf_data = descargar_pdf(link) if link else None
-                if not pdf_data:
-                    st.warning("No se encontró PDF. Puedes subirlo tú mismo.")
-                    uploaded = st.file_uploader("Sube el PDF del libro", type=["pdf"])
-                    if uploaded:
-                        pdf_data = uploaded.read()
-
+else:
+    if not st.session_state.pdf_data:
+        st.subheader("🔍 Buscando el libro en internet...")
+        pdf_data = cargar_pdf_cifrado(libro)
+        if not pdf_data:
+            link = buscar_pdf_google(libro, autor, editorial)
+            pdf_data = descargar_pdf(link) if link else None
             if pdf_data:
-                cifrar_y_guardar_pdf(libro, pdf_data)
-                texto = extraer_texto_pdf(pdf_data)
-                preguntas = generar_preguntas_ai(texto, cantidad)
-                if preguntas:
-                    quizzes[clave] = {
-                        "titulo": libro,
-                        "autor": autor,
-                        "editorial": editorial,
-                        "curso": curso,
-                        "preguntas": preguntas
-                    }
-                    guardar_json(QUIZ_DB, quizzes)
-                    st.session_state.quiz = quizzes[clave]
-                else:
-                    st.error("No se pudieron generar preguntas desde el contenido del libro.")
+                st.success("✅ Libro encontrado automáticamente.")
             else:
-                st.error("No fue posible obtener el contenido del libro para generar preguntas.")
+                st.warning("No se encontró el libro. Puedes subirlo a continuación:")
+                uploaded = st.file_uploader("📤 Sube el PDF del libro", type=["pdf"])
+                if uploaded:
+                    pdf_data = uploaded.read()
+                    st.success("✅ PDF cargado correctamente.")
 
+        if pdf_data:
+            st.session_state.pdf_data = pdf_data
+            cifrar_y_guardar_pdf(libro, pdf_data)
+
+    if st.session_state.pdf_data:
+        if st.button("✨ Generar preguntas para jugar"):
+            texto = extraer_texto_pdf(st.session_state.pdf_data)
+            preguntas = generar_preguntas_ai(texto, cantidad)
+            if preguntas:
+                quizzes[clave] = {
+                    "titulo": libro,
+                    "autor": autor,
+                    "editorial": editorial,
+                    "curso": curso,
+                    "preguntas": preguntas
+                }
+                guardar_json(QUIZ_DB, quizzes)
+                st.session_state.quiz = quizzes[clave]
+                st.session_state.jugador = nombre
+                st.success("✅ Preguntas generadas. ¡Comienza el juego!")
+            else:
+                st.error("No se pudieron generar preguntas. Intenta con otro archivo o libro.")
+
+# --- Juego ---
 if st.session_state.quiz and st.session_state.jugador:
     preguntas = st.session_state.quiz["preguntas"]
     idx = st.session_state.pregunta_idx
@@ -200,8 +210,9 @@ if st.session_state.quiz and st.session_state.jugador:
     else:
         st.balloons()
         st.success(f"Juego terminado, {st.session_state.jugador}! Puntaje: {st.session_state.puntaje}/{len(preguntas)}")
-        if st.button("Jugar otra vez"):
+        if st.button("🔁 Jugar otra vez"):
             st.session_state.quiz = {}
             st.session_state.pregunta_idx = 0
             st.session_state.puntaje = 0
+            st.session_state.pdf_data = None
             st.rerun()
