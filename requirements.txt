@@ -4,3 +4,5 @@ google-search-results
 cryptography
 PyMuPDF
 requests
+pytesseract
+Pillow
