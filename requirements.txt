@@ -1,8 +1,9 @@
 streamlit
-openai>=1.0.0
-google-search-results
-cryptography
-PyMuPDF
+openai
 requests
+python-dotenv
+PyMuPDF
 pytesseract
 Pillow
+cryptography
+serpapi
