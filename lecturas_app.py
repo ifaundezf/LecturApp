@@ -1,4 +1,4 @@
-# lecturas_app.py - LecturApp con flujo robusto: PDF subida + validación + generación
+# lecturas_app.py - LecturApp con flujo robusto corregido: PDF subida + validación + generación
 
 import streamlit as st
 import json
@@ -39,7 +39,8 @@ cursos_lista = [curso for nivel in niveles_y_cursos.values() for curso in nivel]
 def cargar_json(path):
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     except:
         return {}
 
@@ -131,6 +132,7 @@ if "quiz" not in st.session_state:
     st.session_state.pregunta_idx = 0
     st.session_state.puntaje = 0
     st.session_state.pdf_data = None
+    st.session_state.pdf_upload_pending = True
 
 nombre = st.text_input("Tu nombre para jugar:")
 libro = st.text_input("Nombre del libro:")
@@ -151,22 +153,27 @@ if clave in quizzes:
 else:
     if not st.session_state.pdf_data:
         st.subheader("🔍 Buscando el libro en internet...")
+        encontrado = False
         pdf_data = cargar_pdf_cifrado(libro)
-        if not pdf_data:
+        if pdf_data:
+            encontrado = True
+        else:
             link = buscar_pdf_google(libro, autor, editorial)
             pdf_data = descargar_pdf(link) if link else None
             if pdf_data:
                 st.success("✅ Libro encontrado automáticamente.")
-            else:
-                st.warning("No se encontró el libro. Puedes subirlo a continuación:")
-                uploaded = st.file_uploader("📤 Sube el PDF del libro", type=["pdf"])
-                if uploaded:
-                    pdf_data = uploaded.read()
-                    st.success("✅ PDF cargado correctamente.")
+                encontrado = True
 
-        if pdf_data:
+        if encontrado and pdf_data:
             st.session_state.pdf_data = pdf_data
             cifrar_y_guardar_pdf(libro, pdf_data)
+
+    if not st.session_state.pdf_data:
+        uploaded = st.file_uploader("📤 Sube el PDF del libro", type=["pdf"])
+        if uploaded:
+            st.session_state.pdf_data = uploaded.read()
+            cifrar_y_guardar_pdf(libro, st.session_state.pdf_data)
+            st.success("✅ PDF cargado correctamente.")
 
     if st.session_state.pdf_data:
         if st.button("✨ Generar preguntas para jugar"):
