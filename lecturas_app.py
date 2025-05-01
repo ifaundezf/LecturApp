@@ -1,4 +1,4 @@
-# lecturas_app.py - LecturApp con flujo robusto corregido: PDF subida + validación + generación
+# lecturas_app.py - LecturApp: Modo Juego COMPLETO con búsqueda mejorada y OCR automático
 
 import streamlit as st
 import json
@@ -7,40 +7,43 @@ import random
 import time
 import requests
 import fitz  # PyMuPDF
-from googlesearch import search
+from serpapi import GoogleSearch
 from cryptography.fernet import Fernet
 from openai import OpenAI
 from PIL import Image
 import pytesseract
 from io import BytesIO
 
+# Configuración de página
 st.set_page_config(page_title="LecturApp: Modo Juego", page_icon="📚")
 
+# Rutas y claves
 QUIZ_DB = "registro_quizzes.json"
+SABIAS_QUE = "sabias_que.json"
+ASSETS_PATH = "assets"
 PDF_FOLDER = "libros_cifrados"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
+# Claves desde secrets
 FERNET_KEY = st.secrets["FERNET_KEY"]
+SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 cipher = Fernet(FERNET_KEY.encode())
 client = OpenAI(api_key=OPENAI_KEY)
 
-niveles_y_cursos = {
-    "Educación Preescolar": ["1º Nivel de Transición (Pre-Kínder)", "2º Nivel de Transición (Kínder)"],
-    "Educación Básica": [
-        "1º Básico", "2º Básico", "3º Básico", "4º Básico",
-        "5º Básico", "6º Básico", "7º Básico", "8º Básico"
-    ],
-    "Educación Media": ["1º Medio", "2º Medio", "3º Medio", "4º Medio"]
-}
+# Crear archivos base si no existen
+if not os.path.exists(QUIZ_DB):
+    with open(QUIZ_DB, "w") as f:
+        json.dump({}, f)
+if not os.path.exists(SABIAS_QUE):
+    with open(SABIAS_QUE, "w") as f:
+        json.dump({}, f)
 
-cursos_lista = [curso for nivel in niveles_y_cursos.values() for curso in nivel]
-
+# --- Funciones auxiliares ---
 def cargar_json(path):
     try:
         with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
+            return json.load(f)
     except:
         return {}
 
@@ -55,13 +58,13 @@ def buscar_pdf_google(titulo, autor, editorial):
         f"{titulo} libro completo filetype:pdf"
     ]
     for q in queries:
-        try:
-            resultados = list(search(q, num_results=10, lang="es"))
-            for link in resultados:
-                if link.lower().endswith(".pdf"):
-                    return link
-        except Exception as e:
-            print(f"[Error en búsqueda Google] {e}")
+        params = {"q": q, "hl": "es", "gl": "cl", "api_key": SERPAPI_KEY}
+        search = GoogleSearch(params)
+        results = search.get_dict().get("organic_results", [])
+        for r in results:
+            link = r.get("link", "")
+            if link.lower().endswith(".pdf"):
+                return link
     return None
 
 def descargar_pdf(url):
@@ -103,7 +106,8 @@ def extraer_texto_pdf(pdf_bytes):
 def generar_preguntas_ai(texto, cantidad):
     prompt = (
         f"Genera {cantidad} preguntas de opción múltiple basadas en este texto. "
-        "Mitad literales y mitad interpretativas. En español latino. Formato JSON con 'pregunta', 'opciones', 'respuesta_correcta'.\nTexto:\n" + texto[:3000]
+        "Mitad literales y mitad interpretativas. En español latino. Formato "
+        "JSON con 'pregunta', 'opciones', 'respuesta_correcta'.\nTexto:\n" + texto[:3000]
     )
     try:
         response = client.chat.completions.create(
@@ -123,102 +127,143 @@ def nombre_valido(nombre):
     palabras_prohibidas = ["malo", "tonto", "fuck", "shit", "puta", "mierda"]
     return not any(p in nombre.lower() for p in palabras_prohibidas)
 
-# --- UI Principal ---
+# --- Interfaz ---
 st.title("📚 LecturApp: Modo Juego")
 
-if "quiz" not in st.session_state:
-    st.session_state.quiz = {}
-    st.session_state.jugador = ""
-    st.session_state.pregunta_idx = 0
-    st.session_state.puntaje = 0
-    st.session_state.pdf_data = None
-    st.session_state.pdf_upload_pending = True
+opcion = st.radio("¿Qué quieres hacer?", ["🎮 Crear sala de juego", "👥 Unirse a una sala existente"])
 
-nombre = st.text_input("Tu nombre para jugar:")
-libro = st.text_input("Nombre del libro:")
-autor = st.text_input("Autor:")
-editorial = st.text_input("Editorial:")
-curso = st.selectbox("Selecciona tu curso:", cursos_lista)
-cantidad = st.selectbox("¿Cuántas preguntas quieres?", [30, 40, 50])
+if "sala_codigo" not in st.session_state:
+    st.session_state.update({
+        "sala_codigo": "",
+        "jugador": "",
+        "curso": "",
+        "quiz_generado": False,
+        "en_juego": False,
+        "pregunta_actual": 0,
+        "puntaje": 0,
+        "quiz_preguntas": []
+    })
 
-clave = f"{libro.strip().lower()}"
-quizzes = cargar_json(QUIZ_DB)
-
-if clave in quizzes:
-    st.info("Este libro ya tiene preguntas generadas. Puedes comenzar el juego directamente.")
-    if st.button("🎮 Jugar con preguntas existentes"):
-        st.session_state.quiz = quizzes[clave]
-        st.session_state.jugador = nombre
-
-else:
-    if not st.session_state.pdf_data:
-        st.subheader("🔍 Buscando el libro en internet...")
-        encontrado = False
-        pdf_data = cargar_pdf_cifrado(libro)
-        if pdf_data:
-            encontrado = True
+if opcion == "🎮 Crear sala de juego":
+    st.subheader("Crear nueva sala")
+    nombre = st.text_input("Tu nombre")
+    curso = st.selectbox("Curso", ["Tercero Básico", "Cuarto Básico", "Quinto Básico", "Sexto Básico"])
+    if st.button("Crear sala"):
+        if not nombre_valido(nombre):
+            st.warning("Nombre no permitido.")
         else:
-            link = buscar_pdf_google(libro, autor, editorial)
-            pdf_data = descargar_pdf(link) if link else None
+            codigo = ''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=5))
+            st.session_state.update({
+                "sala_codigo": codigo,
+                "jugador": nombre,
+                "curso": curso,
+                "quiz_generado": False
+            })
+
+if opcion == "👥 Unirse a una sala existente":
+    st.subheader("Unirse a sala")
+    nombre = st.text_input("Tu nombre")
+    codigo = st.text_input("Código de sala")
+    if st.button("Unirme"):
+        if not nombre_valido(nombre):
+            st.warning("Nombre no permitido.")
+        elif not codigo:
+            st.warning("Debes ingresar un código válido.")
+        else:
+            st.session_state.update({"sala_codigo": codigo, "jugador": nombre, "quiz_generado": False})
+
+# --- Flujo principal ---
+if st.session_state.sala_codigo and st.session_state.jugador:
+    st.markdown(f"### ✅ Jugador: {st.session_state.jugador}")
+    st.markdown(f"### ✅ Sala: {st.session_state.sala_codigo}")
+    if st.session_state.curso:
+        st.markdown(f"### ✅ Curso: {st.session_state.curso}")
+
+    quizzes = cargar_json(QUIZ_DB)
+    clave_libro = None
+
+    if opcion == "🎮 Crear sala de juego" and not st.session_state.quiz_generado:
+        st.markdown("---")
+        st.subheader("📚 Configura tu quiz de lectura")
+
+        libro = st.text_input("Nombre del libro")
+        autor = st.text_input("Autor")
+        editorial = st.text_input("Editorial")
+        cantidad = st.selectbox("¿Cuántas preguntas quieres generar?", [30, 40, 50])
+
+        if libro:
+            clave_libro = f"{st.session_state.curso} | {libro.strip().lower()}"
+
+        if clave_libro in quizzes:
+            if st.button("📂 Usar quiz existente"):
+                st.session_state.quiz_generado = True
+                st.session_state.quiz_preguntas = quizzes[clave_libro]["preguntas"]
+                st.success("Quiz cargado desde la base de datos.")
+        elif libro and autor and editorial:
+            # Intentar cargar PDF desde repositorio local cifrado
+            pdf_data = cargar_pdf_cifrado(libro)
+            if not pdf_data:
+                with st.spinner("🔍 Buscando PDF en internet..."):
+                    link = buscar_pdf_google(libro, autor, editorial)
+                    pdf_data = descargar_pdf(link) if link else None
+
+            if not pdf_data:
+                st.warning("No se encontró PDF online. Puedes subir el archivo manualmente.")
+                uploaded = st.file_uploader("Sube el PDF del libro", type=["pdf"])
+                if uploaded is not None:
+                    pdf_data = uploaded.read()
+
             if pdf_data:
-                st.success("✅ Libro encontrado automáticamente.")
-                encontrado = True
-
-        if encontrado and pdf_data:
-            st.session_state.pdf_data = pdf_data
-            cifrar_y_guardar_pdf(libro, pdf_data)
-
-    if not st.session_state.pdf_data:
-        uploaded = st.file_uploader("📤 Sube el PDF del libro", type=["pdf"])
-        if uploaded:
-            st.session_state.pdf_data = uploaded.read()
-            cifrar_y_guardar_pdf(libro, st.session_state.pdf_data)
-            st.success("✅ PDF cargado correctamente.")
-
-    if st.session_state.pdf_data:
-        if st.button("✨ Generar preguntas para jugar"):
-            texto = extraer_texto_pdf(st.session_state.pdf_data)
-            preguntas = generar_preguntas_ai(texto, cantidad)
-            if preguntas:
-                quizzes[clave] = {
-                    "titulo": libro,
-                    "autor": autor,
-                    "editorial": editorial,
-                    "curso": curso,
-                    "preguntas": preguntas
-                }
-                guardar_json(QUIZ_DB, quizzes)
-                st.session_state.quiz = quizzes[clave]
-                st.session_state.jugador = nombre
-                st.success("✅ Preguntas generadas. ¡Comienza el juego!")
+                texto = extraer_texto_pdf(pdf_data)
+                preguntas = generar_preguntas_ai(texto, cantidad)
+                if preguntas:
+                    cifrar_y_guardar_pdf(libro, pdf_data)
+                    quizzes[clave_libro] = {
+                        "libro": libro,
+                        "autor": autor,
+                        "editorial": editorial,
+                        "curso": st.session_state.curso,
+                        "cantidad": cantidad,
+                        "preguntas": preguntas
+                    }
+                    guardar_json(QUIZ_DB, quizzes)
+                    st.session_state.quiz_generado = True
+                    st.session_state.quiz_preguntas = preguntas
+                    st.success("✅ Quiz creado exitosamente.")
+                else:
+                    st.error("No se pudieron generar preguntas del texto.")
             else:
-                st.error("No se pudieron generar preguntas. Intenta con otro archivo o libro.")
+                st.error("No hay PDF disponible para generar preguntas.")
 
-# --- Juego ---
-if st.session_state.quiz and st.session_state.jugador:
-    preguntas = st.session_state.quiz["preguntas"]
-    idx = st.session_state.pregunta_idx
-
-    if idx < len(preguntas):
-        p = preguntas[idx]
-        st.markdown(f"### Pregunta {idx + 1}: {p['pregunta']}")
-        respuesta = st.radio("Opciones:", p['opciones'], key=f"q_{idx}")
-
-        if st.button("Responder", key=f"btn_{idx}"):
-            correcta = p['opciones'][p['respuesta_correcta']]
-            if respuesta == correcta:
-                st.success("¡Correcto!")
-                st.session_state.puntaje += 1
-            else:
-                st.error(f"Incorrecto. La respuesta correcta era: {correcta}")
-            st.session_state.pregunta_idx += 1
-            st.rerun()
-    else:
-        st.balloons()
-        st.success(f"Juego terminado, {st.session_state.jugador}! Puntaje: {st.session_state.puntaje}/{len(preguntas)}")
-        if st.button("🔁 Jugar otra vez"):
-            st.session_state.quiz = {}
-            st.session_state.pregunta_idx = 0
+    if st.session_state.quiz_generado and not st.session_state.en_juego:
+        st.markdown("## 🎮 ¡Listo para jugar!")
+        if st.button("Iniciar juego"):
+            st.session_state.en_juego = True
+            st.session_state.pregunta_actual = 0
             st.session_state.puntaje = 0
-            st.session_state.pdf_data = None
             st.rerun()
+
+    if st.session_state.en_juego:
+        st.markdown("---")
+        st.header("🧠 Pregunta en juego")
+        preguntas = st.session_state.quiz_preguntas
+        idx = st.session_state.pregunta_actual
+        if idx < len(preguntas):
+            p = preguntas[idx]
+            st.write(f"**{p['pregunta']}**")
+            opciones = p["opciones"]
+            seleccion = st.radio("Selecciona una opción:", opciones, key=f"q{idx}")
+            if st.button("Responder", key=f"resp{idx}"):
+                correcta = opciones[p["respuesta_correcta"]]
+                if seleccion == correcta:
+                    st.success("✅ ¡Correcto!")
+                    st.session_state.puntaje += 1
+                else:
+                    st.error(f"❌ Incorrecto. La respuesta correcta era: {correcta}")
+                st.session_state.pregunta_actual += 1
+                time.sleep(2)
+                st.rerun()
+        else:
+            st.balloons()
+            st.success(f"🎉 ¡Juego terminado! Puntaje: {st.session_state.puntaje} de {len(preguntas)}")
+            st.session_state.en_juego = False
