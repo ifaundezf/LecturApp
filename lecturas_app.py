@@ -26,6 +26,17 @@ OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 cipher = Fernet(FERNET_KEY.encode())
 client = OpenAI(api_key=OPENAI_KEY)
 
+niveles_y_cursos = {
+    "Educación Preescolar": ["1º Nivel de Transición (Pre-Kínder)", "2º Nivel de Transición (Kínder)"],
+    "Educación Básica": [
+        "1º Básico", "2º Básico", "3º Básico", "4º Básico",
+        "5º Básico", "6º Básico", "7º Básico", "8º Básico"
+    ],
+    "Educación Media": ["1º Medio", "2º Medio", "3º Medio", "4º Medio"]
+}
+
+cursos_lista = [curso for nivel in niveles_y_cursos.values() for curso in nivel]
+
 def cargar_json(path):
     try:
         with open(path, encoding="utf-8") as f:
@@ -125,6 +136,7 @@ nombre = st.text_input("Tu nombre para jugar:")
 libro = st.text_input("Nombre del libro:")
 autor = st.text_input("Autor:")
 editorial = st.text_input("Editorial:")
+curso = st.selectbox("Selecciona tu curso:", cursos_lista)
 cantidad = st.selectbox("¿Cuántas preguntas quieres?", [30, 40, 50])
 
 if st.button("🎲 Comenzar juego"):
@@ -157,7 +169,7 @@ if st.button("🎲 Comenzar juego"):
                         "titulo": libro,
                         "autor": autor,
                         "editorial": editorial,
-                        "curso": "",
+                        "curso": curso,
                         "preguntas": preguntas
                     }
                     guardar_json(QUIZ_DB, quizzes)
