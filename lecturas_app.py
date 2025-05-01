@@ -7,7 +7,7 @@ import random
 import time
 import requests
 import fitz  # PyMuPDF
-from serpapi import GoogleSearch
+from googlesearch import search
 from cryptography.fernet import Fernet
 from openai import OpenAI
 from PIL import Image
@@ -21,7 +21,6 @@ PDF_FOLDER = "libros_cifrados"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
 FERNET_KEY = st.secrets["FERNET_KEY"]
-SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 cipher = Fernet(FERNET_KEY.encode())
 client = OpenAI(api_key=OPENAI_KEY)
@@ -55,13 +54,13 @@ def buscar_pdf_google(titulo, autor, editorial):
         f"{titulo} libro completo filetype:pdf"
     ]
     for q in queries:
-        params = {"q": q, "hl": "es", "gl": "cl", "api_key": SERPAPI_KEY}
-        search = GoogleSearch(params)
-        results = search.get_dict().get("organic_results", [])
-        for r in results:
-            link = r.get("link", "")
-            if link.lower().endswith(".pdf"):
-                return link
+        try:
+            resultados = list(search(q, num_results=10, lang="es"))
+            for link in resultados:
+                if link.lower().endswith(".pdf"):
+                    return link
+        except Exception as e:
+            print(f"[Error en búsqueda Google] {e}")
     return None
 
 def descargar_pdf(url):
