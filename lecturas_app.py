@@ -1,4 +1,4 @@
-# lecturas_app.py - LecturApp: Modo Juego COMPLETO (actualizado para OpenAI 1.x+)
+# lecturas_app.py - LecturApp: Modo Juego COMPLETO con búsqueda mejorada y OCR automático
 
 import streamlit as st
 import json
@@ -10,6 +10,9 @@ import fitz  # PyMuPDF
 from serpapi import GoogleSearch
 from cryptography.fernet import Fernet
 from openai import OpenAI
+from PIL import Image
+import pytesseract
+from io import BytesIO
 
 # Configuración de página
 st.set_page_config(page_title="LecturApp: Modo Juego", page_icon="📚")
@@ -49,14 +52,19 @@ def guardar_json(path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def buscar_pdf_google(titulo, autor, editorial):
-    query = f"{titulo} {autor} {editorial} filetype:pdf"
-    params = {"q": query, "hl": "es", "gl": "cl", "api_key": SERPAPI_KEY}
-    search = GoogleSearch(params)
-    results = search.get_dict().get("organic_results", [])
-    for r in results:
-        link = r.get("link", "")
-        if link.lower().endswith(".pdf"):
-            return link
+    queries = [
+        f"{titulo} {autor} {editorial} filetype:pdf",
+        f"{titulo} pdf",
+        f"{titulo} libro completo filetype:pdf"
+    ]
+    for q in queries:
+        params = {"q": q, "hl": "es", "gl": "cl", "api_key": SERPAPI_KEY}
+        search = GoogleSearch(params)
+        results = search.get_dict().get("organic_results", [])
+        for r in results:
+            link = r.get("link", "")
+            if link.lower().endswith(".pdf"):
+                return link
     return None
 
 def descargar_pdf(url):
@@ -69,21 +77,30 @@ def descargar_pdf(url):
 
 def cifrar_y_guardar_pdf(titulo, pdf_bytes):
     nombre = os.path.join(PDF_FOLDER, f"{titulo.lower().replace(' ', '_')}.enc")
-    cifrado = cipher.encrypt(pdf_bytes)
-    with open(nombre, "wb") as f:
-        f.write(cifrado)
+    if not os.path.exists(nombre):
+        cifrado = cipher.encrypt(pdf_bytes)
+        with open(nombre, "wb") as f:
+            f.write(cifrado)
     return nombre
 
-def cargar_pdf_cifrado(path):
-    with open(path, "rb") as f:
-        cifrado = f.read()
-    return cipher.decrypt(cifrado)
+def cargar_pdf_cifrado(titulo):
+    nombre = os.path.join(PDF_FOLDER, f"{titulo.lower().replace(' ', '_')}.enc")
+    if os.path.exists(nombre):
+        with open(nombre, "rb") as f:
+            cifrado = f.read()
+        return cipher.decrypt(cifrado)
+    return None
 
 def extraer_texto_pdf(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     texto = ""
     for page in doc:
-        texto += page.get_text()
+        txt = page.get_text()
+        if not txt.strip():
+            pix = page.get_pixmap()
+            img = Image.open(BytesIO(pix.tobytes()))
+            txt = pytesseract.image_to_string(img, lang='spa')
+        texto += txt + "\n"
     return texto
 
 def generar_preguntas_ai(texto, cantidad):
